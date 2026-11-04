@@ -40,9 +40,11 @@
 
 #define READ_PERIOD_DEFAULT 30
 
-#define MQTT_SERVER_DEFAULT "mqtt://localhost"
-#define MQTT_CLIENT_DEFAULT "gqgmctomqtt"
-#define MQTT_TOPIC_DEFAULT "sensors/radiation"
+#define MQTT_SERVER_DEFAULT   "mqtt://localhost"
+#define MQTT_USERNAME_DEFAULT ""
+#define MQTT_PASSWORD_DEFAULT ""
+#define MQTT_CLIENT_DEFAULT   "gqgmctomqtt"
+#define MQTT_TOPIC_DEFAULT    "sensors/radiation"
 
 #define GMCMAP_USER_ID_DEFAULT ""
 #define GMCMAP_COUNTER_ID_DEFAULT ""
@@ -107,6 +109,8 @@ const struct option config_options [] = {
     {"bits",                  required_argument, 0, 0},
     {"read-period",           required_argument, 0, 0},
     {"mqtt-server",           required_argument, 0, 0},
+    {"mqtt-username",         required_argument, 0, 0},
+    {"mqtt-password",         required_argument, 0, 0},
     {"mqtt-client",           required_argument, 0, 0},
     {"mqtt-topic",            required_argument, 0, 0},
     {"gmcmap-user-id",        required_argument, 0, 0},
@@ -140,9 +144,11 @@ bool config(int argc, char *argv[]) {
 
     read_period = config_get_integer("read-period", READ_PERIOD_DEFAULT);
 
-    mqtt_config.server = config_get_string("mqtt-server", MQTT_SERVER_DEFAULT);
-    mqtt_config.client = config_get_string("mqtt-client", MQTT_CLIENT_DEFAULT);
-    mqtt_topic = config_get_string("mqtt-topic", MQTT_TOPIC_DEFAULT);
+    mqtt_config.server   = config_get_string("mqtt-server",   MQTT_SERVER_DEFAULT);
+    mqtt_config.username = config_get_string("mqtt-username", MQTT_USERNAME_DEFAULT);
+    mqtt_config.password = config_get_string("mqtt-password", MQTT_PASSWORD_DEFAULT);
+    mqtt_config.client   = config_get_string("mqtt-client",   MQTT_CLIENT_DEFAULT);
+    mqtt_topic           = config_get_string("mqtt-topic",    MQTT_TOPIC_DEFAULT);
 
     gmcmap_user_id = config_get_string("gmcmap-user-id", GMCMAP_USER_ID_DEFAULT);
     gmcmap_counter_id = config_get_string("gmcmap-counter-id", GMCMAP_COUNTER_ID_DEFAULT);

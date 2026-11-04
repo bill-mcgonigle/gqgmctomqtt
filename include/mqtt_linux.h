@@ -9,6 +9,8 @@
 
 typedef struct {
     const char *server;
+    const char *username;
+    const char *password;
     const char *client;
     bool debug;
 } MqttConfig;
@@ -90,6 +92,8 @@ bool mqtt_begin(const MqttConfig *config) {
     }
     if (ssl)
         mosquitto_tls_insecure_set(mosq, true); // Skip certificate validation
+    if (strlen(config->username) > 0 && strlen(config->password) > 0)
+      mosquitto_username_pw_set(mosq, config->username, config->password);
     mosquitto_connect_callback_set(mosq, mqtt_connect_callback);
     if ((result = mosquitto_connect(mosq, host, port, MQTT_CONNECT_TIMEOUT)) != MOSQ_ERR_SUCCESS) {
         fprintf(stderr, "mqtt: error connecting to broker: %s\n", mosquitto_strerror(result));
