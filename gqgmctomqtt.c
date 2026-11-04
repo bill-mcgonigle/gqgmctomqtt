@@ -39,6 +39,7 @@
 #define SERIAL_BITS_DEFAULT SERIAL_8N1
 
 #define READ_PERIOD_DEFAULT 30
+#define LOG_READINGS_DEFAULT true
 
 #define MQTT_SERVER_DEFAULT   "mqtt://localhost"
 #define MQTT_USERNAME_DEFAULT ""
@@ -48,6 +49,9 @@
 
 #define GMCMAP_USER_ID_DEFAULT ""
 #define GMCMAP_COUNTER_ID_DEFAULT ""
+
+#define RADMAP_USERNAME_DEFAULT ""
+#define RADMAP_PASSWORD_DEFAULT ""
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -87,6 +91,7 @@ void printf_stderr(const char *format, ...) {
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
 #define GMCMAP_PUBLISH_PERIOD 60
+#define RADMAP_PUBLISH_PERIOD 60
 
 #include "include/http_linux.h"
 
@@ -94,6 +99,12 @@ bool gmcmap_send(const char *user, const char *device, const int cpm, const doub
     char url[256], buf[BUF_SIZE];
     sprintf(url, "/log2.asp?AID=%s&GID=%s&CPM=%d&ACPM=%.2f&uSV=%.2f", user, device, cpm, acpm, usvh);
     return http_get("www.gmcmap.com", "80", url, buf, sizeof(buf)) && strstr(buf, "OK.") != NULL;
+}
+
+bool radmap_send(const char *username, const char *password, const int cpm) {
+    char url[256], buf[BUF_SIZE];
+    sprintf(url, "/radmon.php?user=%s&password=%s&value=%d&unit=CPM", username, password, cpm);
+    return http_get("radmon.org", "80", url, buf, sizeof(buf)) && strstr(buf, "OK.") != NULL;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -104,10 +115,11 @@ bool gmcmap_send(const char *user, const char *device, const int cpm, const doub
 // clang-format off
 const struct option config_options [] = {
     {"config",                required_argument, 0, 0},
-    {"port",                  required_argument, 0, 0},
-    {"rate",                  required_argument, 0, 0},
-    {"bits",                  required_argument, 0, 0},
+    {"serial-port",           required_argument, 0, 0},
+    {"serial-rate",           required_argument, 0, 0},
+    {"serial-bits",           required_argument, 0, 0},
     {"read-period",           required_argument, 0, 0},
+    {"log-readings",          required_argument, 0, 0},
     {"mqtt-server",           required_argument, 0, 0},
     {"mqtt-username",         required_argument, 0, 0},
     {"mqtt-password",         required_argument, 0, 0},
@@ -115,24 +127,28 @@ const struct option config_options [] = {
     {"mqtt-topic",            required_argument, 0, 0},
     {"gmcmap-user-id",        required_argument, 0, 0},
     {"gmcmap-counter-id",     required_argument, 0, 0},
+    {"radmap-username",       required_argument, 0, 0},
+    {"radmap-password",       required_argument, 0, 0},
     {0, 0, 0, 0}
 };
 // clang-format on
 
 void config_populate_serial(serial_config_t *config) {
-    config->port = config_get_string("port", SERIAL_PORT_DEFAULT);
-    config->rate = config_get_integer("rate", SERIAL_RATE_DEFAULT);
-    config->bits = config_get_bits("bits", SERIAL_BITS_DEFAULT);
+    config->serial_port = config_get_string("serial-port", SERIAL_PORT_DEFAULT);
+    config->serial_rate = config_get_integer("serial-rate", SERIAL_RATE_DEFAULT);
+    config->serial_bits = config_get_bits("serial-bits", SERIAL_BITS_DEFAULT);
 
-    printf("config: serial: port=%s, rate=%d, bits=%s\n", config->port, config->rate, serial_bits_str(config->bits));
+    printf("config: serial: port=%s, rate=%d, bits=%s\n", config->serial_port, config->serial_rate, serial_bits_str(config->serial_bits));
 }
 
 serial_config_t serial_config;
 int read_period;
+bool log_readings;
 MqttConfig mqtt_config;
 const char *mqtt_topic;
 const char *gmcmap_user_id, *gmcmap_counter_id;
-bool publish_mqtt, publish_gmcmap;
+const char *radmap_username, *radmap_password;
+bool publish_mqtt, publish_gmcmap, publish_radmap;
 
 
 bool config(int argc, char *argv[]) {
@@ -142,7 +158,8 @@ bool config(int argc, char *argv[]) {
 
     config_populate_serial(&serial_config);
 
-    read_period = config_get_integer("read-period", READ_PERIOD_DEFAULT);
+    read_period  = config_get_integer("read-period", READ_PERIOD_DEFAULT);
+    log_readings = config_get_bool("log-readings", READ_PERIOD_DEFAULT);
 
     mqtt_config.server   = config_get_string("mqtt-server",   MQTT_SERVER_DEFAULT);
     mqtt_config.username = config_get_string("mqtt-username", MQTT_USERNAME_DEFAULT);
@@ -150,11 +167,15 @@ bool config(int argc, char *argv[]) {
     mqtt_config.client   = config_get_string("mqtt-client",   MQTT_CLIENT_DEFAULT);
     mqtt_topic           = config_get_string("mqtt-topic",    MQTT_TOPIC_DEFAULT);
 
-    gmcmap_user_id = config_get_string("gmcmap-user-id", GMCMAP_USER_ID_DEFAULT);
+    gmcmap_user_id    = config_get_string("gmcmap-user-id", GMCMAP_USER_ID_DEFAULT);
     gmcmap_counter_id = config_get_string("gmcmap-counter-id", GMCMAP_COUNTER_ID_DEFAULT);
+
+    radmap_username = config_get_string("radmap-username", RADMAP_USERNAME_DEFAULT);
+    radmap_password = config_get_string("radmap-password", RADMAP_PASSWORD_DEFAULT);
 
     publish_mqtt   = (strlen(mqtt_topic) > 0);
     publish_gmcmap = (strlen(gmcmap_user_id) > 0 && strlen(gmcmap_counter_id) > 0);
+    publish_radmap = (strlen(radmap_username) > 0 && strlen(radmap_password) > 0);
 
     return true;
 }
@@ -527,10 +548,17 @@ void cpm_publish_mqtt(const readings_t *readings, const char *topic) {
 }
 
 void cpm_publish_gmcmap(const readings_t *readings, const char *user_id, const char *counter_id) {
-    static time_t last_publish_time = 0;
-    if (intervalable(GMCMAP_PUBLISH_PERIOD, &last_publish_time))
+    static time_t last_gmcmap_publish_time = 0;
+    if (intervalable(GMCMAP_PUBLISH_PERIOD, &last_gmcmap_publish_time))
         if (!gmcmap_send(user_id, counter_id, readings->cpm, readings->acpm, readings->usvh))
             printf("WARNING: publish to gmcmap failed\n");
+}
+
+void cpm_publish_radmap(const readings_t *readings, const char *username, const char *password) {
+    static time_t last_radmap_publish_time = 0;
+    if (intervalable(RADMAP_PUBLISH_PERIOD, &last_radmap_publish_time))
+        if (!radmap_send(username, password, readings->cpm))
+            printf("WARNING: publish to radmap failed\n");
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -560,6 +588,8 @@ void process_readings(volatile bool *running) {
         printf(", publishing to MQTT:'%s'", mqtt_topic);
     if (publish_gmcmap)
         printf("%s GMCMAP:'%s/%s'", publish_mqtt ? "," : ", publishing to", gmcmap_user_id, gmcmap_counter_id);
+    if (publish_radmap)
+        printf("%s RADMAP:'%s/%s'", publish_gmcmap ? "," : ", publishing to", radmap_username, radmap_password);
     printf("\n");
 
     calibration_data_t calib_data;
@@ -575,11 +605,14 @@ void process_readings(volatile bool *running) {
             process_fault(running, "short or faulty data, device probably disconnected");
         else {
             const readings_t readings = readings_update(cpm, &calib_data);
-            cpm_display(&readings);
+	    if (log_readings)
+                cpm_display(&readings);
             if (publish_mqtt)
                 cpm_publish_mqtt(&readings, mqtt_topic);
             if (publish_gmcmap)
                 cpm_publish_gmcmap(&readings, gmcmap_user_id, gmcmap_counter_id);
+            if (publish_radmap)
+                cpm_publish_radmap(&readings, radmap_username, radmap_password);
             process_sleep(running);
         }
     }

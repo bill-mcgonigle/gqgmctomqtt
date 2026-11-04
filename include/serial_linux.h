@@ -31,9 +31,9 @@ const char *serial_bits_str(const serial_bits_t bits) {
 }
 
 typedef struct {
-    const char *port;
-    int rate;
-    serial_bits_t bits;
+    const char *serial_port;
+    int serial_rate;
+    serial_bits_t serial_bits;
 } serial_config_t;
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -46,10 +46,10 @@ int serial_fd = -1;
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
 
-bool serial_check(void) { return (access(serial_cfg->port, F_OK) == 0); }
+bool serial_check(void) { return (access(serial_cfg->serial_port, F_OK) == 0); }
 
 bool serial_connect(void) {
-    serial_fd = open(serial_cfg->port, O_RDWR | O_NOCTTY);
+    serial_fd = open(serial_cfg->serial_port, O_RDWR | O_NOCTTY);
     if (serial_fd < 0) {
         PRINTF_ERROR("serial: error opening port: %s\n", strerror(errno));
         return false;
@@ -63,7 +63,7 @@ bool serial_connect(void) {
         return false;
     }
     speed_t baud;
-    switch (serial_cfg->rate) {
+    switch (serial_cfg->serial_rate) {
     case 1200:
         baud = B1200;
         break;
@@ -89,15 +89,15 @@ bool serial_connect(void) {
         baud = B115200;
         break;
     default:
-        PRINTF_ERROR("serial: unsupported baud rate: %d\n", serial_cfg->rate);
+        PRINTF_ERROR("serial: unsupported baud rate: %d\n", serial_cfg->serial_rate);
         close(serial_fd);
         serial_fd = -1;
         return false;
     }
     cfsetispeed(&tty, baud);
     cfsetospeed(&tty, baud);
-    if (serial_cfg->bits != SERIAL_8N1) {
-        PRINTF_ERROR("serial: unsupported bits: %s\n", serial_bits_str(serial_cfg->bits));
+    if (serial_cfg->serial_bits != SERIAL_8N1) {
+        PRINTF_ERROR("serial: unsupported bits: %s\n", serial_bits_str(serial_cfg->serial_bits));
         close(serial_fd);
         serial_fd = -1;
         return false;

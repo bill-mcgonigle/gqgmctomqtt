@@ -1,0 +1,17 @@
+[Unit]
+Description=GQ Electronics GMC to Remote MQTT Service
+Wants=network-online.target
+After=network-online.target
+After=dev-gqgmc500plus.device
+Requires=dev-gqgmc500plus.device
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gqgmctomqtt --config /etc/default/gqgmctomqtt
+TimeoutStopSec=15s
+KillMode=mixed
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
