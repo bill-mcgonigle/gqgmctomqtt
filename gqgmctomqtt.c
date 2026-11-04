@@ -128,6 +128,8 @@ int read_period;
 MqttConfig mqtt_config;
 const char *mqtt_topic;
 const char *gmcmap_user_id, *gmcmap_counter_id;
+bool publish_mqtt, publish_gmcmap;
+
 
 bool config(int argc, char *argv[]) {
 
@@ -144,6 +146,9 @@ bool config(int argc, char *argv[]) {
 
     gmcmap_user_id = config_get_string("gmcmap-user-id", GMCMAP_USER_ID_DEFAULT);
     gmcmap_counter_id = config_get_string("gmcmap-counter-id", GMCMAP_COUNTER_ID_DEFAULT);
+
+    publish_mqtt   = (strlen(mqtt_topic) > 0);
+    publish_gmcmap = (strlen(gmcmap_user_id) > 0 && strlen(gmcmap_counter_id) > 0);
 
     return true;
 }
@@ -164,7 +169,7 @@ bool device_getmodel(char *model, const int length) {
     if (length < DEVICE_GETMODEL_SIZE)
         return false;
     for (int i = 0; i < DEVICE_GETMODEL_SIZE - 1; i++)
-        model[i] = isprint(buffer[i]) ? buffer[i] : '.';
+      model[i] = (char)isprint(buffer[i]) ? buffer[i] : '.';
     model[DEVICE_GETMODEL_SIZE - 1] = '\0';
     return true;
 }
@@ -544,9 +549,6 @@ void process_sleep(volatile bool *running) {
 
 void process_readings(volatile bool *running) {
 
-    const bool publish_mqtt = (strlen(mqtt_topic) > 0),
-               publish_gmcmap = (strlen(gmcmap_user_id) > 0 && strlen(gmcmap_counter_id) > 0);
-
     printf("reader: reading CPM every %d seconds", read_period);
     if (publish_mqtt)
         printf(", publishing to MQTT:'%s'", mqtt_topic);
@@ -605,15 +607,19 @@ int main(int argc, char **argv) {
         serial_end();
         return EXIT_FAILURE;
     }
-    if (!mqtt_begin(&mqtt_config)) {
+    if (publish_mqtt) {
+      if (!mqtt_begin(&mqtt_config)) {
         fprintf(stderr, "failed to begin mqtt\n");
         serial_end();
         return EXIT_FAILURE;
+      }
     }
     device_info_display();
     device_conf_load_and_display();
     process_readings(&running);
-    mqtt_end();
+    if (publish_mqtt) {
+      mqtt_end();
+    }
     serial_end();
     return EXIT_SUCCESS;
 }
