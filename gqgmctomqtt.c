@@ -51,7 +51,7 @@
 #define GMCMAP_COUNTER_ID_DEFAULT ""
 
 #define RADMAP_USERNAME_DEFAULT ""
-#define RADMAP_PASSWORD_DEFAULT ""
+#define RADMAP_DATA_PASSWORD_DEFAULT ""
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -103,8 +103,8 @@ bool gmcmap_send(const char *user, const char *device, const int cpm, const doub
 
 bool radmap_send(const char *username, const char *password, const int cpm) {
     char url[256], buf[BUF_SIZE];
-    sprintf(url, "/radmon.php?user=%s&password=%s&value=%d&unit=CPM", username, password, cpm);
-    return http_get("radmon.org", "80", url, buf, sizeof(buf)) && strstr(buf, "OK.") != NULL;
+    sprintf(url, "/radmon.php?function=submit&user=%s&password=%s&value=%d&unit=CPM", username, password, cpm);
+    return http_get("radmon.org", "80", url, buf, sizeof(buf)) && strstr(buf, "OK") != NULL;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------
@@ -147,7 +147,7 @@ bool log_readings;
 MqttConfig mqtt_config;
 const char *mqtt_topic;
 const char *gmcmap_user_id, *gmcmap_counter_id;
-const char *radmap_username, *radmap_password;
+const char *radmap_username, *radmap_data_password;
 bool publish_mqtt, publish_gmcmap, publish_radmap;
 
 
@@ -170,12 +170,12 @@ bool config(int argc, char *argv[]) {
     gmcmap_user_id    = config_get_string("gmcmap-user-id", GMCMAP_USER_ID_DEFAULT);
     gmcmap_counter_id = config_get_string("gmcmap-counter-id", GMCMAP_COUNTER_ID_DEFAULT);
 
-    radmap_username = config_get_string("radmap-username", RADMAP_USERNAME_DEFAULT);
-    radmap_password = config_get_string("radmap-password", RADMAP_PASSWORD_DEFAULT);
+    radmap_username      = config_get_string("radmap-username", RADMAP_USERNAME_DEFAULT);
+    radmap_data_password = config_get_string("radmap-data-password", RADMAP_DATA_PASSWORD_DEFAULT);
 
     publish_mqtt   = (strlen(mqtt_topic) > 0);
     publish_gmcmap = (strlen(gmcmap_user_id) > 0 && strlen(gmcmap_counter_id) > 0);
-    publish_radmap = (strlen(radmap_username) > 0 && strlen(radmap_password) > 0);
+    publish_radmap = (strlen(radmap_username) > 0 && strlen(radmap_data_password) > 0);
 
     return true;
 }
@@ -589,7 +589,7 @@ void process_readings(volatile bool *running) {
     if (publish_gmcmap)
         printf("%s GMCMAP:'%s/%s'", publish_mqtt ? "," : ", publishing to", gmcmap_user_id, gmcmap_counter_id);
     if (publish_radmap)
-        printf("%s RADMAP:'%s/%s'", publish_gmcmap ? "," : ", publishing to", radmap_username, radmap_password);
+        printf("%s RADMAP:'%s/%s'", publish_gmcmap ? "," : ", publishing to", radmap_username, radmap_data_password);
     printf("\n");
 
     calibration_data_t calib_data;
@@ -612,7 +612,7 @@ void process_readings(volatile bool *running) {
             if (publish_gmcmap)
                 cpm_publish_gmcmap(&readings, gmcmap_user_id, gmcmap_counter_id);
             if (publish_radmap)
-                cpm_publish_radmap(&readings, radmap_username, radmap_password);
+                cpm_publish_radmap(&readings, radmap_username, radmap_data_password);
             process_sleep(running);
         }
     }
