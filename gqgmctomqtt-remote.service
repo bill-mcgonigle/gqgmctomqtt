@@ -8,6 +8,8 @@ Requires=dev-gqgmc500plus.device
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/gqgmctomqtt --config /etc/default/gqgmctomqtt
+User=gqgmctomqtt
+Group=gqgmctomqtt
 TimeoutStopSec=15s
 KillMode=mixed
 Restart=on-failure
